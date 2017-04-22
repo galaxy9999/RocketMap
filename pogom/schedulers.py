@@ -602,7 +602,7 @@ class SpeedScan(HexSearch):
             altitude = get_altitude(self.args, location)
             generated_locations.append(
                 (step, (location[0], location[1], altitude), 0, 0))
-        log.warning('GENERATED LOCATIONS: %s', generated_locations)
+        # log.warning('GENERATED LOCATIONS: %s', generated_locations)
         return generated_locations
 
     def getsize(self):
