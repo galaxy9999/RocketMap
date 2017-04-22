@@ -1084,6 +1084,10 @@ class ScannedLocation(BaseModel):
 
     @classmethod
     def select_in_hex(cls, locs):
+        if locs == []:
+           log.warning('CAUGHT THE BLANK LOCATION, DON\'T TRY AND GET SPAWNS')
+           in_hex = []
+           return in_hex
         # There should be a way to delegate this to SpawnPoint.select_in_hex,
         # but w/e.
         cells = []
@@ -2248,7 +2252,7 @@ def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue,
                                         else:
                                             log.info('***CATCHING DUDES***Non-ditto disposing failed - trying again in 10 sec')
 
-            encounter_result = clear_dict_response(encounter_result)
+                encounter_result = clear_dict_response(encounter_result)
             if args.webhooks:
 
                 wh_poke = pokemon[p['encounter_id']].copy()
@@ -2589,7 +2593,7 @@ def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue,
                                 log.warning('FINNA TRYNA LURE BUT I AINT GOT NONE')
                                 forbidden = True
                                 log.warning('This account has no lures! Thowing exception!')
-                                meme = spin_response['ThisDoesntExist']
+                                meme = spin_response['NoLures!']
                             while lure_status is None and forbidden is False:
                                 req = api.create_request()
                                 lure_request = req.add_fort_modifier(modifier_type=lure_id,
