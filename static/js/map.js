@@ -394,42 +394,6 @@ function openMapDirections(lat, lng) { // eslint-disable-line no-unused-vars
     window.open(url, '_blank')
 }
 
-
-function scout(encounterId) {
-    var encounterIdLong = atob(encounterId)
-    var infoEl = $("#scoutCP" + encounterIdLong)
-    var probsEl = $("#scoutProb" + encounterIdLong)
-    return $.ajax({
-        url: 'scout',
-        type: 'GET',
-        data: {
-            'encounter_id': encounterId
-        },
-        dataType: 'json',
-        cache: false,
-        beforeSend: function () {
-            infoEl.text("Scouting, please wait...")
-            infoEl.show()
-        },
-        error: function () {
-            infoEl.text("Error scouting, try again?")
-        },
-        success: function (data, textStatus, jqXHR) {
-            console.log(data)
-            if ('cp' in data) {
-                infoEl.text("CP: " + data.cp + " | Pokemon Level: " + data.level + " | Scout Level: " + data.trainer_level)
-            } else {
-                infoEl.text(data.msg)
-            }
-            if ('prob_red' in data) {
-                probsEl.text("Pokeball: " + data.prob_red + "% | Great Ball: " + data.prob_blue + "% | Ultra Ball: " + data.prob_yellow + "%")
-                probsEl.show()
-            }
-        }
-    })
-
-}
-
 // Converts timestamp to readable String
 function getDateStr(t) {
     var dateStr = 'Unknown'
@@ -468,7 +432,6 @@ function pokemonLabel(item) {
             </div>
             `
     }
-    var encounterIdLong = atob(item['encounter_id'])
     var contentstring = `
         <div>
         <b>${item['pokemon_name']}</b>`
@@ -491,14 +454,10 @@ function pokemonLabel(item) {
             Location: ${item['latitude'].toFixed(6)}, ${item['longitude'].toFixed(7)}
         </div>
             ${details}
-            <div id="scoutCP${encounterIdLong}" style="display:none;"></div>
-            <div id="scoutProb${encounterIdLong}" style="display:none;"></div>
         <div>
         <a href='javascript:excludePokemon(${item['pokemon_id']})'>Exclude</a>&nbsp;&nbsp
         <a href='javascript:notifyAboutPokemon(${item['pokemon_id']})'>Notify</a>&nbsp;&nbsp
         <a href='javascript:removePokemonMarker("${item['encounter_id']}")'>Remove</a>&nbsp;&nbsp
-        <a href='javascript:void(0);' onclick='javascript:openMapDirections(${item['latitude']},${item['longitude']});' title='View in Maps'>Get directions</a>
-        <a href='javascript:void(0);' onclick='javascript:scout("${item['encounterId']}");' title='Scout CP'>Scout</a>
         </div>`
     return contentstring
 }
