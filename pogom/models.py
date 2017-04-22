@@ -1822,13 +1822,6 @@ def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue,
     # and a list of forts.
     cells = map_dict['responses']['GET_MAP_OBJECTS']['map_cells']
 
-    # Get the level for the pokestop spin, and to send to webhook.
-    level = get_player_level(map_dict)
-
-    # Helping out the GC.
-    if 'GET_INVENTORY' in map_dict['responses']:
-        del map_dict['responses']['GET_INVENTORY']
-
     for i, cell in enumerate(cells):
         # If we have map responses then use the time from the request
         if i == 0:
@@ -2027,7 +2020,7 @@ def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue,
             }
 
             if (encounter_result is not None and 'wild_pokemon'
-                    in encounter_result['responses']['ENCOUNTER']):
+                    in encounter_result['responses']['ENCOUNTER']) and int(level) > 24:
                 pokemon_info = encounter_result['responses'][
                     'ENCOUNTER']['wild_pokemon']['pokemon_data']
                 pokemon[p['encounter_id']].update({
