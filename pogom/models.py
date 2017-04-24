@@ -30,22 +30,39 @@ from random import random
 # for geofence
 from matplotlib.path import Path
 from ast import literal_eval
+# fixing scout?
+from queue import Queue, Empty
+from pgoapi import PGoApi
 
 from . import config
 from .utils import get_pokemon_name, get_pokemon_rarity, get_pokemon_types, \
     get_args, cellid, in_radius, date_secs, clock_between, secs_between, \
     get_move_name, get_move_damage, get_move_energy, get_move_type, \
-    clear_dict_response
+    clear_dict_response, generate_device_info
 from .transform import transform_from_wgs_to_gcj, get_new_coords
 from .customLog import printPokemon
-from .account import tutorial_pokestop_spin, get_player_level
+from .account import TooManyLoginAttempts, tutorial_pokestop_spin,\
+    get_player_level
 log = logging.getLogger(__name__)
 
 args = get_args()
+
 flaskDb = FlaskDB()
 cache = TTLCache(maxsize=100, ttl=60 * 5)
 
-db_schema_version = 17
+cp_account_queue = Queue()
+iv_account_queue = Queue()
+
+if len(args.cp_accountcsv) > 0:
+    for i, account in enumerate(args.cp_accountcsv):
+        cp_account_queue.put(account)
+if len(args.iv_accountcsv) > 0:
+    # print(args.iv_accountcsv)
+    for i, account in enumerate(args.iv_accountcsv):
+        # print(account)
+        iv_account_queue.put(account)
+
+db_schema_version = 20
 
 
 class MyRetryDB(RetryOperationalError, PooledMySQLDatabase):
@@ -112,6 +129,8 @@ class Pokemon(BaseModel):
     weight = FloatField(null=True)
     height = FloatField(null=True)
     gender = SmallIntegerField(null=True)
+    cp = SmallIntegerField(null=True)
+    cp_multiplier = FloatField(null=True)
     form = SmallIntegerField(null=True)
     last_modified = DateTimeField(
         null=True, index=True, default=datetime.utcnow)
@@ -1793,9 +1812,128 @@ def geofence(step_location, geofence_file, forbidden=False):
     return step_location_geofenced
 
 
+def check_login(args, account, api, position, proxy_url):
+    # Logged in? Enough time left? Cool!
+    if api._auth_provider and api._auth_provider._ticket_expire:
+        remaining_time = api._auth_provider._ticket_expire / 1000 - time.time()
+        if remaining_time > 60:
+            log.debug(
+                'Credentials remain valid for another %f seconds.',
+                remaining_time)
+            return
+
+    # Try to login. Repeat a few times, but don't get stuck here.
+    i = 0
+    while i < args.login_retries:
+        try:
+            if proxy_url:
+                api.set_authentication(
+                    provider=account['auth_service'],
+                    username=account['username'],
+                    password=account['password'],
+                    proxy_config={'http': proxy_url, 'https': proxy_url})
+            else:
+                api.set_authentication(
+                    provider=account['auth_service'],
+                    username=account['username'],
+                    password=account['password'])
+            break
+        except:
+            if i >= args.login_retries:
+                raise TooManyLoginAttempts('Exceeded login attempts.')
+            else:
+                i += 1
+                log.error(
+                    'Failed to login to Pokemon Go with account %s. ' +
+                    'Trying again in %g seconds.',
+                    account['username'], args.login_delay)
+                time.sleep(args.login_delay)
+
+    log.debug('Login for account %s successful.', account['username'])
+    time.sleep(args.scan_delay)
+
+
+def get_encounter_details(p, step_location, key_scheduler, encountering_lvl):
+    # print(p)
+    # print(step_location)
+    # print(key_scheduler)
+    # print(encountering_lvl)
+    cp = None
+    time.sleep(args.encounter_delay)
+
+    device_info = generate_device_info()
+    api = PGoApi(device_info=device_info)
+    if args.proxy is not None and len(args.proxy) > 0:
+        api.set_proxy({'http': args.proxy[0], 'https': args.proxy[0]})
+
+    key = key_scheduler.next()
+    api.activate_hash_server(key)
+
+    api.set_position(*step_location)
+    proxyurl = False
+    if args.proxy is not None and len(args.proxy) > 0:
+        proxyurl = args.proxy[0]
+
+    if encountering_lvl == 30:
+        account = cp_account_queue.get()
+    elif encountering_lvl == 25:
+        account = iv_account_queue.get()
+
+    # print(account)
+
+    log.info(
+        'Requesting encounter details for Pokemon (ID #%s) using account %s',
+        str(p['pokemon_data']['pokemon_id']), account['username'])
+
+    # Think about what happens when login fails.
+    # Right now its silently discarded from the queue
+    check_login(args, account, api, step_location, proxyurl)
+    try:
+        req = api.create_request()
+        encounter_result = req.encounter(
+            encounter_id=p['encounter_id'],
+            spawn_point_id=p['spawn_point_id'],
+            player_latitude=step_location[0],
+            player_longitude=step_location[1])
+        encounter_result = req.check_challenge()
+        encounter_result = req.get_hatched_eggs()
+        encounter_result = req.get_inventory()
+        encounter_result = req.check_awarded_badges()
+        encounter_result = req.download_settings()
+        encounter_result = req.get_buddy_walked()
+        encounter_result = req.call()
+
+        if encounter_result is not None:
+            captcha_url = encounter_result['responses']['CHECK_CHALLENGE'][
+                    'challenge_url']  # Check for captcha
+            if len(captcha_url) > 1:  # Throw warning but finish parsing
+                log.warning('Account %s encountered a reCaptcha.', account)
+            elif 'wild_pokemon' in encounter_result['responses']['ENCOUNTER']:
+                pokemon_info = encounter_result[
+                    'responses']['ENCOUNTER']['wild_pokemon']['pokemon_data']
+                log.info(
+                    'Encountered Pokemon #%s for details.',
+                    p['pokemon_data']['pokemon_id'])
+            else:
+                log.warning(
+                    'Pokemon #%s could not be encountered for details.',
+                    p['pokemon_data']['pokemon_id'])
+    except Exception, e:
+        log.error('Unexpected error trying to get CP: %s', repr(e))
+
+    if encountering_lvl is 30:
+        account = cp_account_queue.put(account)
+    elif encountering_lvl is 25:
+        account = iv_account_queue.put(account)
+
+    return pokemon_info
+
+
+
+
 # todo: this probably shouldn't _really_ be in "models" anymore, but w/e.
 def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue,
-              api, now_date, account):
+              api, now_date, account, key_scheduler):
     pokemon = {}
     pokestops = {}
     gyms = {}
@@ -1968,7 +2106,8 @@ def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue,
             disappear_time = now_date + \
                 timedelta(seconds=seconds_until_despawn)
 
-            printPokemon(p['pokemon_data']['pokemon_id'], p[
+            pid = p['pokemon_data']['pokemon_id']
+            printPokemon(pid, p[
                          'latitude'], p['longitude'], disappear_time)
 
             # Scan for IVs and moves.
@@ -1997,7 +2136,7 @@ def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue,
                 captcha_url = encounter_result['responses']['CHECK_CHALLENGE'][
                     'challenge_url']  # Check for captcha
                 if len(captcha_url) > 1:  # Throw warning but finish parsing
-                    log.debug('Account encountered a reCaptcha.')
+                    log.warning('Account encountered a reCaptcha.')
 
             previous_id = p['pokemon_data']['pokemon_id']
 
@@ -2017,6 +2156,8 @@ def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue,
                 'weight': None,
                 'gender': None,
                 'form': None,
+                'cp': None,
+                'cp_multiplier': None,
             }
 
             if (encounter_result is not None and 'wild_pokemon'
@@ -2042,6 +2183,21 @@ def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue,
                         'move_2': pokemon_info['move_2'],
                         'height': pokemon_info['height_m'],
                         'weight': pokemon_info['weight_kg'],
+                    })
+                if int(level) > 29:
+                    pokemon[p['encounter_id']].update({
+                        'individual_attack': pokemon_info.get(
+                            'individual_attack', 0),
+                        'individual_defense': pokemon_info.get(
+                            'individual_defense', 0),
+                        'individual_stamina': pokemon_info.get(
+                            'individual_stamina', 0),
+                        'move_1': pokemon_info['move_1'],
+                        'move_2': pokemon_info['move_2'],
+                        'height': pokemon_info['height_m'],
+                        'weight': pokemon_info['weight_kg'],
+                        'cp': pokemon_info.get('cp', None),
+                        'cp_multiplier': pokemon_info.get('cp_multiplier', None),
                     })
 
                 pokeball_count = 0
@@ -2211,10 +2367,8 @@ def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue,
                             if 'pokemon_data' in inventory_item_data:
                                 pokemonItem = inventory_item_data['pokemon_data']
                                 #    log.info('***CATCHING DUDES***dump-PID%s:%s, the pokemon[\'id\'] is %s', index, pokemon['pokemon_id'], pokemon['id'])
-
                                 if 'is_egg' in pokemonItem and pokemonItem['is_egg']:
                                     continue
-
                                 if pokemonItem['id'] == catch_pid:
                                     # this pokemonItem is the most recent caught - is it ditto-mon
                                     if pokemonItem['pokemon_id'] == 132:
@@ -2257,6 +2411,46 @@ def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue,
                                             log.info('***CATCHING DUDES***Non-ditto disposing failed - trying again in 10 sec')
 
                 encounter_result = clear_dict_response(encounter_result)
+            # Retrieve high level encounter details if requested
+            if p['pokemon_data']['pokemon_id'] in args.cp_whitelist and int(level) < 30:
+                # Add lvl 30+ CP to the general encounter details of lvl 25+
+                pokemon_info = get_encounter_details(
+                    p, step_location, key_scheduler, 30)
+                pokemon[p['encounter_id']].update({
+                    'individual_attack': pokemon_info.get(
+                        'individual_attack', None),
+                    'individual_defense': pokemon_info.get(
+                        'individual_defense', None),
+                    'individual_stamina': pokemon_info.get(
+                        'individual_stamina', None),
+                    'move_1': pokemon_info.get('move_1', None),
+                    'move_2': pokemon_info.get('move_2', None),
+                    'height': pokemon_info.get('height_m', None),
+                    'weight': pokemon_info.get('weight_kg', None),
+                    'gender': pokemon_info['pokemon_display'].get(
+                        'gender', None),
+                    'cp': pokemon_info.get('cp', None),
+                    'cp_multiplier': pokemon_info.get('cp_multiplier', None),
+                })
+            elif p['pokemon_data']['pokemon_id'] in args.iv_whitelist and int(level) < 25:
+                # Provide IVs, movesets, height, weight, gender of lvl 25+
+                pokemon_info = get_encounter_details(
+                    p, step_location, key_scheduler, 25)
+                pokemon[p['encounter_id']].update({
+                    'individual_attack': pokemon_info.get(
+                        'individual_attack', None),
+                    'individual_defense': pokemon_info.get(
+                        'individual_defense', None),
+                    'individual_stamina': pokemon_info.get(
+                        'individual_stamina', None),
+                    'move_1': pokemon_info.get('move_1', None),
+                    'move_2': pokemon_info.get('move_2', None),
+                    'height': pokemon_info.get('height_m', None),
+                    'weight': pokemon_info.get('weight_kg', None),
+                    'gender': pokemon_info['pokemon_display'].get(
+                        'gender', None)
+                })
+
             if args.webhooks:
                 pokemon_id = p['pokemon_data']['pokemon_id']
                 if (pokemon_id in args.webhook_whitelist or
@@ -2987,7 +3181,7 @@ def clean_db_loop(args):
 
             # If desired, clear old Pokemon spawns.
             if args.purge_data > 0:
-                log.info("Beginning purge of old Pokemon spawns.")
+                log.info('Beginning purge of old Pokemon spawns.')
                 start = datetime.utcnow()
                 query = (Pokemon
                          .delete()
@@ -3064,7 +3258,7 @@ def create_tables(db):
               SpawnPoint, ScanSpawnPoint, SpawnpointDetectionData,
               Token, LocationAltitude]
     for table in tables:
-        log.info("Creating table: %s", table.__name__)
+        log.info('Creating table: %s', table.__name__)
         db.create_tables([table], safe=True)
         db.close()
 
@@ -3078,7 +3272,7 @@ def drop_tables(db):
     db.connect()
     db.execute_sql('SET FOREIGN_KEY_CHECKS=0;')
     for table in tables:
-        log.info("Dropping table: %s", table.__name__)
+        log.info('Dropping table: %s', table.__name__)
         db.drop_tables([table], safe=True)
     db.execute_sql('SET FOREIGN_KEY_CHECKS=1;')
     db.close()
@@ -3316,4 +3510,12 @@ def database_migrate(db, old_ver):
         migrate(
             migrator.add_column('pokemon', 'form',
                                 SmallIntegerField(null=True))
+        )
+
+    if old_ver < 18:
+        migrate(
+            migrator.add_column('pokemon', 'cp',
+                                SmallIntegerField(null=True, default=0)),
+            migrator.add_column('pokemon', 'cp_multiplier',
+                                FloatField(null=True))
         )

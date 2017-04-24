@@ -103,6 +103,29 @@
 #encounter-whitelist-file:      # File containing a list of Pokemon to encounter for more stats. (Do not use with blacklist-file)
 #encounter-blacklist:           # Blacklist of pokemon ids to NOT encounter. Syntax [id,id,id,id] (Do not use with whitelist)
 #encounter-blacklist-file:      # File containing a list of Pokemon to NOT encounter formore stats. (Do not use with whitelist-file)
+#iv-whitelist:                  # Whitelist of pokemon ids for level 25+ accounts to gather. Syntax [id,id,id,id]
+#cp-whitelist:                  # Whitelist of pokemon ids for level 30+ accounts to gather. Syntax [id,id,id,id]
+
+# BOT
+###################
+#ditto:                         # Set to true to catch all Pidgey, Rattata, Zubat, Magikarp, Sentret, HootHoot and Yanma - check for Ditto and update the map
+#pokestop-spinning:             # Set to true to spin Pokestops in range of scans
+#incubate-eggs:                 # Set to true to incubate eggs after inventory checks
+#level-cap:                     # Level to stop ditto / pokestop / incubation actions. (default=40)
+#setLure:                       # Set to true to set lures on all Pokestops in range of scans
+#lureFence:                     # File containing geofence of area to set lures
+#nolureFence:                   # File containing geofence of area where accounts will NOT place lures
+
+#cp-auth-service:
+#cp-username:
+#cp-password:
+#iv-auth-service:
+#iv-username:
+#iv-password:
+#cp-whitelist:
+#iv-whitelist:
+#cp-accountcsv:
+#iv-accountcsv:
 
 
 # Webserver settings

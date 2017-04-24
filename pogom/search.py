@@ -1050,25 +1050,30 @@ def search_worker_thread(args, account_queue, account_failures,
                 greatball_count = 0
                 ultraball_count = 0
                 totalBalls = 0
+                nextLevel = 0
+                untilNext = 0
+                currentExp = 0
                 try:
                     test = response_dict['responses']['GET_INVENTORY']
                 except KeyError:
                     if response_dict['status_code'] == 100:
                         status['message'] = ('{} recieved SESSION_INVALIDATED. Check API version / Bossland status').format(account['username'])
-                        log.exception('{}. Exception message: {}'.format(
-                            status['message'], repr(e)))
+                        log.exception('{}.'.format(status['message']))
                     elif response_dict['status_code'] == 3:
                         status['message'] = ('{} recieved BAD_REQUEST. This account is banned').format(account['username'])
-                        log.exception('{}. Exception message: {}'.format(
-                            status['message'], repr(e)))
+                        log.exception('{}.'.format(status['message']))
 
                 for items in response_dict['responses']['GET_INVENTORY']['inventory_delta']['inventory_items']:
                     inventory_item_data = items['inventory_item_data']
                     if 'player_stats' in inventory_item_data:
+                        # print(inventory_item_data)
                         level = inventory_item_data['player_stats']['level']
-                        currentExp = inventory_item_data['player_stats']['experience']
-                        nextLevel = inventory_item_data['player_stats']['next_level_xp']
-                        untilNext = nextLevel - currentExp
+                        if 'next_level_xp' in inventory_item_data:
+                            nextLevel = inventory_item_data['player_stats']['next_level_xp']
+                        if 'experience' in inventory_item_data:
+                            currentExp = inventory_item_data['player_stats']['experience']
+                            untilNext = nextLevel - currentExp
+
                     if 'item' in inventory_item_data and inventory_item_data['item']['item_id'] == 501:
                         totalDisks = inventory_item_data['item'].get('count', 0)
                         # log.debug('@@@LURE@@@ FOUND LURES: %s IN TOTAL', totalDisks)
@@ -1105,7 +1110,8 @@ def search_worker_thread(args, account_queue, account_failures,
                         break
 
                     parsed = parse_map(args, response_dict, step_location,
-                                       dbq, whq, api, scan_date, account)
+                                       dbq, whq, api, scan_date, account,
+                                       key_scheduler)
                     del response_dict
                     scheduler.task_done(status, parsed)
                     if parsed['count'] > 0:

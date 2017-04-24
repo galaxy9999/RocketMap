@@ -72,6 +72,30 @@ def get_args():
     parser.add_argument('-p', '--password', action='append', default=[],
                         help=('Passwords, either single one for all ' +
                               'accounts or one per account.'))
+    parser.add_argument('-iva', '--iv-auth-service', type=str.lower,
+                        action='append', default=[],
+                        help=('Auth Service for level 25 account: ' +
+                              'ptc or google. Default is ptc.'))
+    parser.add_argument('-ivu', '--iv-username', action='append',
+                        default=[],
+                        help=('username of level 25 account used for' +
+                            'extracting IVs'))
+    parser.add_argument('-ivp', '--iv-password', action='append',
+                        default=[],
+                        help=('password of level 25 account used for ' +
+                            'extracting IVs'))
+    parser.add_argument('-cpa', '--cp-auth-service', type=str.lower,
+                        action='append', default=[],
+                        help=('Auth Service for level 30 account: ' +
+                              'ptc or google. Default is ptc.'))
+    parser.add_argument('-cpu', '--cp-username', action='append',
+                        default=[],
+                        help=('username of level 30 account used for ' +
+                            'extracting CP'))
+    parser.add_argument('-cpp', '--cp-password', action='append',
+                        default=[],
+                        help=('password of level 30 account used for ' +
+                            'extracting CP'))
     parser.add_argument('-w', '--workers', type=int,
                         help=('Number of search worker threads to start. ' +
                               'Defaults to the number of accounts specified.'))
@@ -86,6 +110,12 @@ def get_args():
     parser.add_argument('-ac', '--accountcsv',
                         help=('Load accounts from CSV file containing ' +
                               '"auth_service,username,passwd" lines.'))
+    parser.add_argument('-ivac', '--iv-accountcsv',
+                        help=('Load accounts from CSV file containing level' +
+                              '25 "auth_service,username,passwd" lines.'))
+    parser.add_argument('-cpac', '--cp-accountcsv',
+                        help=('Load accounts from CSV file containing level' +
+                              '30 "auth_service,username,passwd" lines.'))
     parser.add_argument('-bh', '--beehive',
                         help=('Use beehive configuration for multiple ' +
                               'accounts, one account per hex.  Make sure ' +
@@ -221,6 +251,16 @@ def get_args():
                                                'webhooks. Pokemon are '
                                                ' specified by their name, '
                                                ' one on each line.')
+    iv_list = parser.add_mutually_exclusive_group()
+    iv_list.add_argument(
+        '-ivwht', '--iv-whitelist', action='append',
+        default=[],
+        help='List of Pokemon to encounter for iv.')
+    cp_list = parser.add_mutually_exclusive_group()
+    cp_list.add_argument(
+        '-cpwht', '--cp-whitelist', action='append',
+        default=[],
+        help='List of Pokemon to encounter for cp.')
     parser.add_argument('-ld', '--login-delay',
                         help='Time delay between each login attempt.',
                         type=float, default=6)
@@ -604,6 +644,229 @@ def get_args():
                               " was " + type_error)
                         sys.exit(1)
 
+        if args.iv_accountcsv is not None:
+            # Giving num_fields something it would usually not get.
+            num_fields = -1
+            with open(args.iv_accountcsv, 'r') as f:
+                for num, line in enumerate(f, 1):
+
+                    fields = []
+
+                    # First time around populate num_fields with current field
+                    # count.
+                    if num_fields < 0:
+                        num_fields = line.count(',') + 1
+
+                    csv_input = []
+                    csv_input.append('')
+                    csv_input.append('<username>')
+                    csv_input.append('<username>,<password>')
+                    csv_input.append('<ptc/google>,<username>,<password>')
+
+                    # If the number of fields is differend this is not a CSV.
+                    if num_fields != line.count(',') + 1:
+                        print(sys.argv[0] +
+                              ": Error parsing CSV file on line " + str(num) +
+                              ". Your file started with the following " +
+                              "input, '" + csv_input[num_fields] +
+                              "' but now you gave us '" +
+                              csv_input[line.count(',') + 1] + "'.")
+                        sys.exit(1)
+
+                    field_error = ''
+                    line = line.strip()
+
+                    # Ignore blank lines and comment lines.
+                    if len(line) == 0 or line.startswith('#'):
+                        continue
+
+                    # If number of fields is more than 1 split the line into
+                    # fields and strip them.
+                    if num_fields > 1:
+                        fields = line.split(",")
+                        fields = map(str.strip, fields)
+
+                    # If the number of fields is one then assume this is
+                    # "username". As requested.
+                    if num_fields == 1:
+                        # Empty lines are already ignored.
+                        args.iv_username.append(line)
+
+                    # If the number of fields is two then assume this is
+                    # "username,password". As requested.
+                    if num_fields == 2:
+                        # If field length is not longer than 0 something is
+                        # wrong!
+                        if len(fields[0]) > 0:
+                            args.iv_username.append(fields[0])
+                        else:
+                            field_error = 'username'
+
+                        # If field length is not longer than 0 something is
+                        # wrong!
+                        if len(fields[1]) > 0:
+                            args.iv_password.append(fields[1])
+                        else:
+                            field_error = 'password'
+
+                    # If the number of fields is three then assume this is
+                    # "ptc,username,password". As requested.
+                    if num_fields == 3:
+                        # If field 0 is not ptc or google something is wrong!
+                        if (fields[0].lower() == 'ptc' or
+                                fields[0].lower() == 'google'):
+                            args.iv_auth_service.append(fields[0])
+                        else:
+                            field_error = 'method'
+
+                        # If field length is not longer then 0 something is
+                        # wrong!
+                        if len(fields[1]) > 0:
+                            args.iv_username.append(fields[1])
+                        else:
+                            field_error = 'username'
+
+                        # If field length is not longer then 0 something is
+                        # wrong!
+                        if len(fields[2]) > 0:
+                            args.iv_password.append(fields[2])
+                        else:
+                            field_error = 'password'
+
+                    if num_fields > 3:
+                        print(('Too many fields in accounts file: max ' +
+                               'supported are 3 fields. ' +
+                               'Found {} fields').format(num_fields))
+                        sys.exit(1)
+
+                    # If something is wrong display error.
+                    if field_error != '':
+                        type_error = 'empty!'
+                        if field_error == 'method':
+                            type_error = (
+                                'not ptc or google instead we got \'' +
+                                fields[0] + '\'!')
+                        print(sys.argv[0] +
+                              ": Error parsing CSV file on line " + str(num) +
+                              ". We found " + str(num_fields) + " fields, " +
+                              "so your input should have looked like '" +
+                              csv_input[num_fields] + "'\nBut you gave us '" +
+                              line + "', your " + field_error +
+                              " was " + type_error)
+                        sys.exit(1)
+
+        if args.cp_accountcsv is not None:
+            # Giving num_fields something it would usually not get.
+            num_fields = -1
+            with open(args.cp_accountcsv, 'r') as f:
+                for num, line in enumerate(f, 1):
+
+                    fields = []
+
+                    # First time around populate num_fields with current field
+                    # count.
+                    if num_fields < 0:
+                        num_fields = line.count(',') + 1
+
+                    csv_input = []
+                    csv_input.append('')
+                    csv_input.append('<username>')
+                    csv_input.append('<username>,<password>')
+                    csv_input.append('<ptc/google>,<username>,<password>')
+
+                    # If the number of fields is differend this is not a CSV.
+                    if num_fields != line.count(',') + 1:
+                        print(sys.argv[0] +
+                              ": Error parsing CSV file on line " + str(num) +
+                              ". Your file started with the following " +
+                              "input, '" + csv_input[num_fields] +
+                              "' but now you gave us '" +
+                              csv_input[line.count(',') + 1] + "'.")
+                        sys.exit(1)
+
+                    field_error = ''
+                    line = line.strip()
+
+                    # Ignore blank lines and comment lines.
+                    if len(line) == 0 or line.startswith('#'):
+                        continue
+
+                    # If number of fields is more than 1 split the line into
+                    # fields and strip them.
+                    if num_fields > 1:
+                        fields = line.split(",")
+                        fields = map(str.strip, fields)
+
+                    # If the number of fields is one then assume this is
+                    # "username". As requested.
+                    if num_fields == 1:
+                        # Empty lines are already ignored.
+                        args.cp_username.append(line)
+
+                    # If the number of fields is two then assume this is
+                    # "username,password". As requested.
+                    if num_fields == 2:
+                        # If field length is not longer than 0 something is
+                        # wrong!
+                        if len(fields[0]) > 0:
+                            args.cp_username.append(fields[0])
+                        else:
+                            field_error = 'username'
+
+                        # If field length is not longer than 0 something is
+                        # wrong!
+                        if len(fields[1]) > 0:
+                            args.cp_password.append(fields[1])
+                        else:
+                            field_error = 'password'
+
+                    # If the number of fields is three then assume this is
+                    # "ptc,username,password". As requested.
+                    if num_fields == 3:
+                        # If field 0 is not ptc or google something is wrong!
+                        if (fields[0].lower() == 'ptc' or
+                                fields[0].lower() == 'google'):
+                            args.cp_auth_service.append(fields[0])
+                        else:
+                            field_error = 'method'
+
+                        # If field length is not longer then 0 something is
+                        # wrong!
+                        if len(fields[1]) > 0:
+                            args.cp_username.append(fields[1])
+                        else:
+                            field_error = 'username'
+
+                        # If field length is not longer then 0 something is
+                        # wrong!
+                        if len(fields[2]) > 0:
+                            args.cp_password.append(fields[2])
+                        else:
+                            field_error = 'password'
+
+                    if num_fields > 3:
+                        print(('Too many fields in accounts file: max ' +
+                               'supported are 3 fields. ' +
+                               'Found {} fields').format(num_fields))
+                        sys.exit(1)
+
+                    # If something is wrong display error.
+                    if field_error != '':
+                        type_error = 'empty!'
+                        if field_error == 'method':
+                            type_error = (
+                                'not ptc or google instead we got \'' +
+                                fields[0] + '\'!')
+                        print(sys.argv[0] +
+                              ": Error parsing CSV file on line " + str(num) +
+                              ". We found " + str(num_fields) + " fields, " +
+                              "so your input should have looked like '" +
+                              csv_input[num_fields] + "'\nBut you gave us '" +
+                              line + "', your " + field_error +
+                              " was " + type_error)
+                        sys.exit(1)
+
+
         errors = []
 
         num_auths = len(args.auth_service)
@@ -636,6 +899,13 @@ def get_args():
         if num_auths == 0:
             args.auth_service = ['ptc']
 
+        if args.iv_auth_service is None:
+            args.iv_auth_service = 'ptc'
+
+        if args.cp_auth_service is None:
+            args.cp_auth_service = 'ptc'
+
+
         num_auths = len(args.auth_service)
 
         if num_usernames > 1:
@@ -666,6 +936,25 @@ def get_args():
             args.accounts.append({'username': username,
                                   'password': args.password[i],
                                   'auth_service': args.auth_service[i]})
+
+        # Make the accounts list.
+        args.iv_accountcsv = []
+        if args.iv_username is not None:
+            for i, username in enumerate(args.iv_username):
+                args.iv_accountcsv.append({
+                    'username': username,
+                    'password': args.iv_password[i],
+                    'auth_service': args.iv_auth_service[i]})
+
+        # Make the accounts list.
+        args.cp_accountcsv = []
+        if args.cp_username is not None:
+            for i, username in enumerate(args.cp_username):
+                args.cp_accountcsv.append({
+                    'username': username,
+                    'password': args.cp_password[i],
+                    'auth_service': args.cp_auth_service[i]})
+
 
         # Make max workers equal number of accounts if unspecified, and disable
         # account switching.
@@ -698,6 +987,10 @@ def get_args():
                                         args.encounter_blacklist]
             args.encounter_whitelist = [int(i) for i in
                                         args.encounter_whitelist]
+
+        args.iv_whitelist = [int(i) for i in args.iv_whitelist]
+        args.cp_whitelist = [int(i) for i in args.cp_whitelist]
+
 
         if args.webhook_whitelist_file:
             with open(args.webhook_whitelist_file) as f:
