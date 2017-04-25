@@ -112,10 +112,12 @@ def get_args():
                               '"auth_service,username,passwd" lines.'))
     parser.add_argument('-ivac', '--iv-accountcsv',
                         help=('Load accounts from CSV file containing level' +
-                              '25 "auth_service,username,passwd" lines.'))
+                              '25 "auth_service,username,passwd" lines.'),
+                        default=None)
     parser.add_argument('-cpac', '--cp-accountcsv',
                         help=('Load accounts from CSV file containing level' +
-                              '30 "auth_service,username,passwd" lines.'))
+                              '30 "auth_service,username,passwd" lines.'),
+                        default=None)
     parser.add_argument('-bh', '--beehive',
                         help=('Use beehive configuration for multiple ' +
                               'accounts, one account per hex.  Make sure ' +
@@ -261,6 +263,9 @@ def get_args():
         '-cpwht', '--cp-whitelist', action='append',
         default=[],
         help='List of Pokemon to encounter for cp.')
+    parser.add_argument('-miniv', '--minimum_cp_ivs',
+                        help='Minimum IV percentage required to scout for CP',
+                        type=float, default=0)
     parser.add_argument('-ld', '--login-delay',
                         help='Time delay between each login attempt.',
                         type=float, default=6)

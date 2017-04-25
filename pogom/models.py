@@ -50,8 +50,10 @@ args = get_args()
 flaskDb = FlaskDB()
 cache = TTLCache(maxsize=100, ttl=60 * 5)
 
-cp_account_queue = Queue()
-iv_account_queue = Queue()
+if len(args.cp_accountcsv):
+    cp_account_queue = Queue()
+if len(args.iv_accountcsv):
+    iv_account_queue = Queue()
 
 if len(args.cp_accountcsv) > 0:
     for i, account in enumerate(args.cp_accountcsv):
@@ -2411,8 +2413,34 @@ def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue,
                                             log.info('***CATCHING DUDES***Non-ditto disposing failed - trying again in 10 sec')
 
                 encounter_result = clear_dict_response(encounter_result)
+
+
+
+            ivPercentage = 100
+            if p['pokemon_data']['pokemon_id'] in args.iv_whitelist and int(level) < 25 and len(args.iv_accountcsv) > 1:
+                # Provide IVs, movesets, height, weight, gender of lvl 25+
+                pokemon_info = get_encounter_details(
+                    p, step_location, key_scheduler, 25)
+                iva, ivb, ivc = int(pokemon_info.get('individual_attack', None)), int(pokemon_info.get('individual_defense', None)), int(pokemon_info.get('individual_stamina', None))
+                ivPercentage = ((iva + ivb + ivc) / float(45)) * 100
+                # print(ivPercentage)
+                pokemon[p['encounter_id']].update({
+                    'individual_attack': pokemon_info.get(
+                        'individual_attack', None),
+                    'individual_defense': pokemon_info.get(
+                        'individual_defense', None),
+                    'individual_stamina': pokemon_info.get(
+                        'individual_stamina', None),
+                    'move_1': pokemon_info.get('move_1', None),
+                    'move_2': pokemon_info.get('move_2', None),
+                    'height': pokemon_info.get('height_m', None),
+                    'weight': pokemon_info.get('weight_kg', None),
+                    'gender': pokemon_info['pokemon_display'].get(
+                        'gender', None)
+                })
+
             # Retrieve high level encounter details if requested
-            if p['pokemon_data']['pokemon_id'] in args.cp_whitelist and int(level) < 30:
+            if p['pokemon_data']['pokemon_id'] in args.cp_whitelist and int(level) < 30 and int(ivPercentage) > int(args.minimum_cp_ivs) and len(args.cp_accountcsv) > 1:
                 # Add lvl 30+ CP to the general encounter details of lvl 25+
                 pokemon_info = get_encounter_details(
                     p, step_location, key_scheduler, 30)
@@ -2431,24 +2459,6 @@ def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue,
                         'gender', None),
                     'cp': pokemon_info.get('cp', None),
                     'cp_multiplier': pokemon_info.get('cp_multiplier', None),
-                })
-            elif p['pokemon_data']['pokemon_id'] in args.iv_whitelist and int(level) < 25:
-                # Provide IVs, movesets, height, weight, gender of lvl 25+
-                pokemon_info = get_encounter_details(
-                    p, step_location, key_scheduler, 25)
-                pokemon[p['encounter_id']].update({
-                    'individual_attack': pokemon_info.get(
-                        'individual_attack', None),
-                    'individual_defense': pokemon_info.get(
-                        'individual_defense', None),
-                    'individual_stamina': pokemon_info.get(
-                        'individual_stamina', None),
-                    'move_1': pokemon_info.get('move_1', None),
-                    'move_2': pokemon_info.get('move_2', None),
-                    'height': pokemon_info.get('height_m', None),
-                    'weight': pokemon_info.get('weight_kg', None),
-                    'gender': pokemon_info['pokemon_display'].get(
-                        'gender', None)
                 })
 
             if args.webhooks:
