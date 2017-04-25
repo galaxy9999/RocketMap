@@ -66,8 +66,8 @@ var gymTypes = ['Uncontested', 'Mystic', 'Valor', 'Instinct']
 var gymPrestige = [2000, 4000, 8000, 12000, 16000, 20000, 30000, 40000, 50000]
 var audio = new Audio('static/sounds/ding.mp3')
 
-var genderType = ['♂', '♀', '⚬']
 var cpMultipliers = {1: 0.09399999678134918, 2: 0.16639786958694458, 3: 0.21573247015476227, 4: 0.2557200491428375, 5: 0.29024988412857056, 6: 0.3210875988006592, 7: 0.3492126762866974, 8: 0.37523558735847473, 9: 0.39956727623939514, 10: 0.4225000143051148, 11: 0.443107545375824, 12: 0.46279838681221, 13: 0.4816849529743195, 14: 0.4998584389686584, 15: 0.517393946647644, 16: 0.5343543291091919, 17: 0.5507926940917969, 18: 0.5667545199394226, 19: 0.5822789072990417, 20: 0.5974000096321106, 21: 0.6121572852134705, 22: 0.6265671253204346, 23: 0.6406529545783997, 24: 0.654435634613037, 25: 0.667934000492096, 26: 0.6811649203300476, 27: 0.6941436529159546, 28: 0.7068842053413391, 29: 0.719399094581604, 30: 0.7317000031471252}
+var genderType = ['♂', '♀', '⚲']
 var unownForm = ['unset', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '!', '?']
 
 
@@ -410,54 +410,77 @@ function pokemonLabel(item) {
     var typesDisplay = ''
     var pMove1 = (moves[item['move_1']] !== undefined) ? i8ln(moves[item['move_1']]['name']) : 'gen/unknown'
     var pMove2 = (moves[item['move_2']] !== undefined) ? i8ln(moves[item['move_2']]['name']) : 'gen/unknown'
+    var name = item['pokemon_name']
+    var rarityDisplay = item['pokemon_rarity'] ? '(' + item['pokemon_rarity'] + ')' : ''
+    var types = item['pokemon_types']
+    var typesDisplay = ''
+    var encounterId = item['encounter_id']
+    var id = item['pokemon_id']
+    var latitude = item['latitude']
+    var longitude = item['longitude']
+    var disappearTime = item['disappear_time']
+    var disappearDate = new Date(disappearTime)
+    var atk = item['individual_attack']
+    var def = item['individual_defense']
+    var sta = item['individual_stamina']
+    var pMove1 = (moves[item['move_1']] !== undefined) ? i8ln(moves[item['move_1']]['name']) : 'gen/unknown'
+    var pMove2 = (moves[item['move_2']] !== undefined) ? i8ln(moves[item['move_2']]['name']) : 'gen/unknown'
+    var weight = item['weight']
+    var height = item['height']
+    var gender = item['gender']
+    var form = item['form']
+    var cp = item['cp']
+    var cp_multiplier = item['cp_multiplier']
 
     $.each(item['pokemon_types'], function (index, type) {
         typesDisplay += getTypeSpan(type)
     })
-    var details = ''
-    if (item['cp'] !== null && item['cp_multiplier'] !== null) {
 
-        var pokemonLevel = getPokemonLevel(item['cp_multiplier'])
+    var details = ''
+    if (cp !== null && cp_multiplier !== null) {
+
+        var pokemonLevel = getPokemonLevel(cp_multiplier)
         details += `
             <div>
-                <b>CP: ${item['cp']} (Pokémon level: ${pokemonLevel})</b>
+                <b>CP: ${cp} (Pokémon level: ${pokemonLevel})</b>
             </div>
             `
     }
-    if (item['individual_attack'] !== null && item['individual_defense'] !== 0 && item['individual_stamina'] !== 0) {
-        var iv = getIv(item['individual_attack'], item['individual_defense'], item['individual_stamina'])
+    if (atk !== null && def !== 0 && sta !== 0) {
+        var iv = getIv(atk, def, sta)
         details += `
             <div>
-                IV: ${iv.toFixed(1)}% (${item['individual_attack']}/${item['individual_defense']}/${item['individual_stamina']})
+                IV: ${iv.toFixed(1)}% (${atk}/${def}/${sta})
             </div>
             <div>
                 Moves: ${pMove1} / ${pMove2}
             </div>
             `
     }
-    if (item['weight'] !== null && item['height'] !== null) {
+    if (weight !== null && height !== null) {
         details += `
             <div>
-                Weight: ${item['weight'].toFixed(2)}kg | Height: ${item['height'].toFixed(2)}m
+                Weight: ${weight.toFixed(2)}kg | Height: ${height.toFixed(2)}m
             </div>
             `
     }
-    if (item['gender'] !== null) {
+    if (gender !== null) {
         var contentstring = `
             <div>
-            <b> ${genderType[item['gender'] - 1]} ${item['pokemon_name']}</b>`
+            <b> ${genderType[gender - 1]} ${name}</b>`
     } else {
         var contentstring = `
             <div>
-            <b>${item['pokemon_name']}</b>`
+            <b>${name}</b>`
+        if (id === 201 && form !== null && form > 0) {
+            contentstring += ` (${unownForm[form]})`
+        }
+
     }
 
-    if (item['pokemon_id'] === 201 && item['form'] !== null && item['form'] > 0) {
-        contentstring += ` (${unownForm[item['form']]})`
-    }
     contentstring += `<span> - </span>
             <small>
-                <a href='http://www.pokemon.com/us/pokedex/${item['pokemon_id']}' target='_blank' title='View in Pokedex'>#${item['pokemon_id']}</a>
+                <a href='http://www.pokemon.com/us/pokedex/${id}' target='_blank' title='View in Pokedex'>#${id}</a>
             </small>
             <span> ${rarityDisplay}</span>
             <span> - </span>
@@ -465,16 +488,16 @@ function pokemonLabel(item) {
         </div>
         <div>
             Disappears at ${pad(disappearDate.getHours())}:${pad(disappearDate.getMinutes())}:${pad(disappearDate.getSeconds())}
-            <span class='label-countdown' disappears-at='${item['disappear_time']}'>(00m00s)</span>
+            <span class='label-countdown' disappears-at='${disappearTime}'>(00m00s)</span>
         </div>
         <div>
-            Location: ${item['latitude'].toFixed(6)}, ${item['longitude'].toFixed(7)}
+            Location: ${latitude.toFixed(6)}, ${longitude.toFixed(7)}
         </div>
             ${details}
         <div>
-        <a href='javascript:excludePokemon(${item['pokemon_id']})'>Exclude</a>&nbsp;&nbsp
-        <a href='javascript:notifyAboutPokemon(${item['pokemon_id']})'>Notify</a>&nbsp;&nbsp
-        <a href='javascript:removePokemonMarker("${item['encounter_id']}")'>Remove</a>&nbsp;&nbsp
+        <a href='javascript:excludePokemon(${id})'>Exclude</a>&nbsp;&nbsp
+        <a href='javascript:notifyAboutPokemon(${id})'>Notify</a>&nbsp;&nbsp
+        <a href='javascript:removePokemonMarker("${encounterId}")'>Remove</a>&nbsp;&nbsp
         </div>`
     return contentstring
 }
