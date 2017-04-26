@@ -1066,11 +1066,10 @@ def search_worker_thread(args, account_queue, account_failures,
                 for items in response_dict['responses']['GET_INVENTORY']['inventory_delta']['inventory_items']:
                     inventory_item_data = items['inventory_item_data']
                     if 'player_stats' in inventory_item_data:
-                        # print(inventory_item_data)
                         level = inventory_item_data['player_stats']['level']
-                        if 'next_level_xp' in inventory_item_data:
+                        if 'next_level_xp' in inventory_item_data['player_stats']:
                             nextLevel = inventory_item_data['player_stats']['next_level_xp']
-                        if 'experience' in inventory_item_data:
+                        if 'experience' in inventory_item_data['player_stats']:
                             currentExp = inventory_item_data['player_stats']['experience']
                             untilNext = nextLevel - currentExp
 
